@@ -37,25 +37,29 @@ jobs:
               data = json.load(f)
 
           lignes = data.get(jour, [])
+          rares = [ligne for ligne in lignes if "Toute la journée" not in ligne]
 
-          rares = []
-
-          message = f"🌙 **LES COMPAGNONS DU JOUR — {jour.upper()}**\n\n"
-
-          for ligne in lignes:
-              message += ligne + "\n"
-
-              if "Toute la journée" not in ligne:
-                  rares.append(ligne)
+          contenu = f"🌙 **LES COMPAGNONS DU JOUR — {jour.upper()}**\n\n"
+          contenu += "\n".join(lignes)
 
           if rares:
-              message += "\n⭐ **COMPAGNONS RARES DU JOUR** ⭐\n\n"
+              contenu += "\n\n⭐ **COMPAGNONS RARES DU JOUR** ⭐\n\n"
+              contenu += "\n".join([f"**{rare}**" for rare in rares])
 
-              for rare in rares:
-                  message += f"**{rare}**\n"
+          blocs = []
 
-          with open("message.txt", "w", encoding="utf-8") as f:
-              f.write(message)
+          while len(contenu) > 1800:
+              coupe = contenu.rfind("\n", 0, 1800)
+              if coupe == -1:
+                  coupe = 1800
+              blocs.append(contenu[:coupe])
+              contenu = contenu[coupe:].lstrip()
+
+          if contenu.strip():
+              blocs.append(contenu)
+
+          with open("messages.json", "w", encoding="utf-8") as f:
+              json.dump(blocs, f, ensure_ascii=False)
           PY
 
       - name: Poster sur Discord
@@ -64,36 +68,20 @@ jobs:
         run: |
           python3 << 'PY'
           import json
-          import os
-          import urllib.request
 
-          webhook = os.environ["DISCORD_WEBHOOK"]
+          with open("messages.json", "r", encoding="utf-8") as f:
+              messages = json.load(f)
 
-          with open("message.txt", "r", encoding="utf-8") as f:
-              contenu = f.read()
-
-          blocs = []
-
-          while len(contenu) > 1900:
-              coupe = contenu.rfind("\n", 0, 1900)
-
-              if coupe == -1:
-                  coupe = 1900
-
-              blocs.append(contenu[:coupe])
-              contenu = contenu[coupe:]
-
-          blocs.append(contenu)
-
-          for bloc in blocs:
-              data = json.dumps({"content": bloc}).encode("utf-8")
-
-              req = urllib.request.Request(
-                  webhook,
-                  data=data,
-                  headers={"Content-Type": "application/json"},
-                  method="POST"
-              )
-
-              urllib.request.urlopen(req)
+          for i, message in enumerate(messages, start=1):
+              with open(f"payload-{i}.json", "w", encoding="utf-8") as f:
+                  json.dump({"content": message}, f, ensure_ascii=False)
           PY
+
+          for file in payload-*.json; do
+            curl -i -X POST \
+              -H "Content-Type: application/json" \
+              --data @"$file" \
+              "$DISCORD_WEBHOOK"
+            echo ""
+            sleep 1
+          done
