@@ -13,7 +13,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Construire les messages
+      - name: Construire le message
         run: |
           python3 << 'PY'
           import json
@@ -36,27 +36,26 @@ jobs:
           with open("data.json", "r", encoding="utf-8") as f:
               data = json.load(f)
 
-          lignes = data.get(jour, ["Aucune information."])
+          lignes = data.get(jour, [])
 
-          titre = f"🌙 **Les compagnons du jour — {jour.upper()}**\n\n"
+          rares = []
 
-          messages = []
-          courant = titre
+          message = f"🌙 **LES COMPAGNONS DU JOUR — {jour.upper()}**\n\n"
 
           for ligne in lignes:
-              ajout = str(ligne) + "\n"
+              message += ligne + "\n"
 
-              if len(courant) + len(ajout) > 1800:
-                  messages.append(courant)
-                  courant = ajout
-              else:
-                  courant += ajout
+              if "Toute la journée" not in ligne:
+                  rares.append(ligne)
 
-          if courant.strip():
-              messages.append(courant)
+          if rares:
+              message += "\n⭐ **COMPAGNONS RARES DU JOUR** ⭐\n\n"
 
-          with open("messages.json", "w", encoding="utf-8") as f:
-              json.dump(messages, f, ensure_ascii=False)
+              for rare in rares:
+                  message += f"**{rare}**\n"
+
+          with open("message.txt", "w", encoding="utf-8") as f:
+              f.write(message)
           PY
 
       - name: Poster sur Discord
@@ -66,37 +65,35 @@ jobs:
           python3 << 'PY'
           import json
           import os
-          import subprocess
-          import time
+          import urllib.request
 
           webhook = os.environ["DISCORD_WEBHOOK"]
 
-          with open("messages.json", "r", encoding="utf-8") as f:
-              messages = json.load(f)
+          with open("message.txt", "r", encoding="utf-8") as f:
+              contenu = f.read()
 
-          for i, message in enumerate(messages, start=1):
-              with open("payload.json", "w", encoding="utf-8") as f:
-                  json.dump({"content": message}, f, ensure_ascii=False)
+          blocs = []
 
-              result = subprocess.run(
-                  [
-                      "curl",
-                      "-sS",
-                      "-i",
-                      "-X", "POST",
-                      "-H", "Content-Type: application/json",
-                      "--data", "@payload.json",
-                      webhook
-                  ],
-                  capture_output=True,
-                  text=True
+          while len(contenu) > 1900:
+              coupe = contenu.rfind("\n", 0, 1900)
+
+              if coupe == -1:
+                  coupe = 1900
+
+              blocs.append(contenu[:coupe])
+              contenu = contenu[coupe:]
+
+          blocs.append(contenu)
+
+          for bloc in blocs:
+              data = json.dumps({"content": bloc}).encode("utf-8")
+
+              req = urllib.request.Request(
+                  webhook,
+                  data=data,
+                  headers={"Content-Type": "application/json"},
+                  method="POST"
               )
 
-              print(result.stdout)
-              print(result.stderr)
-
-              if result.returncode != 0 or "HTTP/2 204" not in result.stdout:
-                  raise SystemExit(1)
-
-              time.sleep(1)
+              urllib.request.urlopen(req)
           PY
