@@ -1,0 +1,88 @@
+name: Dream Bot - Les compagnons du jour
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "1 22 * * *"
+    - cron: "1 23 * * *"
+
+jobs:
+  post-discord:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Poster Les compagnons du jour
+        env:
+          DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
+        run: |
+          python3 << 'PY'
+          import json
+          import os
+          import urllib.request
+          from datetime import datetime
+          from zoneinfo import ZoneInfo
+
+          JOURS = {
+              "Monday": "lundi",
+              "Tuesday": "mardi",
+              "Wednesday": "mercredi",
+              "Thursday": "jeudi",
+              "Friday": "vendredi",
+              "Saturday": "samedi",
+              "Sunday": "dimanche",
+          }
+
+          def envoyer(message):
+              payload = json.dumps({
+                  "username": "Dream Bot",
+                  "content": message
+              }).encode("utf-8")
+
+              request = urllib.request.Request(
+                  os.environ["DISCORD_WEBHOOK"],
+                  data=payload,
+                  headers={"Content-Type": "application/json"},
+                  method="POST"
+              )
+              urllib.request.urlopen(request)
+
+          now = datetime.now(ZoneInfo("Europe/Paris"))
+          jour = JOURS[now.strftime("%A")]
+
+          with open("data.json", "r", encoding="utf-8") as fichier:
+              data = json.load(fichier)
+
+          compagnons = data.get(jour, [])
+
+          lignes = [f"🌙 **Les compagnons du jour — {jour.capitalize()}**"]
+
+          if not compagnons:
+              lignes.append("Aucun compagnon renseigné pour aujourd'hui.")
+          else:
+              for c in compagnons:
+                  lignes.append(
+                      f"\n**{c['espece']}**\n"
+                      f"• Disponibilité : {c['disponibilite']}\n"
+                      f"• Nourriture : {c['nourriture']}\n"
+                      f"• Zone : {c['zone']}\n"
+                      f"• Approche : {c['approche']}"
+                  )
+
+          texte = "\n".join(lignes)
+
+          morceaux = []
+          while len(texte) > 1800:
+              coupe = texte.rfind("\n\n", 0, 1800)
+              if coupe == -1:
+                  coupe = 1800
+              morceaux.append(texte[:coupe])
+              texte = texte[coupe:].lstrip()
+          morceaux.append(texte)
+
+          for index, morceau in enumerate(morceaux, start=1):
+              if len(morceaux) > 1:
+                  morceau += f"\n\n_Page {index}/{len(morceaux)}_"
+              envoyer(morceau)
+          PY
