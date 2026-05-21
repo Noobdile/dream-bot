@@ -45,10 +45,9 @@ jobs:
               json.dump({"content": message}, f, ensure_ascii=False)
           PY
 
-      - name: Poster Les compagnons du jour
+      - name: Poster sur Discord
         run: |
-          curl -X POST \
+          curl -i -X POST \
             -H "Content-Type: application/json" \
-            -H "User-Agent: Dream-Bot-GitHub-Actions" \
             --data @payload.json \
             "${{ secrets.DISCORD_WEBHOOK }}"
