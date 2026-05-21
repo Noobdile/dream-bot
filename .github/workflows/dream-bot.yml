@@ -38,49 +38,65 @@ jobs:
 
           lignes = data.get(jour, ["Aucune information."])
 
-          titre = f"🌙 LES COMPAGNONS DU JOUR — {jour.upper()}\n\n"
+          titre = f"🌙 **Les compagnons du jour — {jour.upper()}**\n\n"
 
-          blocs = []
+          messages = []
           courant = titre
 
           for ligne in lignes:
-              ajout = ligne + "\n"
+              ajout = str(ligne) + "\n"
 
-              if len(courant) + len(ajout) > 1900:
-                  blocs.append(courant)
+              if len(courant) + len(ajout) > 1800:
+                  messages.append(courant)
                   courant = ajout
               else:
                   courant += ajout
 
-          blocs.append(courant)
+          if courant.strip():
+              messages.append(courant)
 
           with open("messages.json", "w", encoding="utf-8") as f:
-              json.dump(blocs, f, ensure_ascii=False)
+              json.dump(messages, f, ensure_ascii=False)
           PY
 
       - name: Poster sur Discord
+        env:
+          DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
         run: |
           python3 << 'PY'
           import json
           import os
-          import urllib.request
+          import subprocess
+          import time
 
           webhook = os.environ["DISCORD_WEBHOOK"]
 
           with open("messages.json", "r", encoding="utf-8") as f:
               messages = json.load(f)
 
-          for message in messages:
-              data = json.dumps({"content": message}).encode("utf-8")
+          for i, message in enumerate(messages, start=1):
+              with open("payload.json", "w", encoding="utf-8") as f:
+                  json.dump({"content": message}, f, ensure_ascii=False)
 
-              req = urllib.request.Request(
-                  webhook,
-                  data=data,
-                  headers={"Content-Type": "application/json"},
-                  method="POST"
+              result = subprocess.run(
+                  [
+                      "curl",
+                      "-sS",
+                      "-i",
+                      "-X", "POST",
+                      "-H", "Content-Type: application/json",
+                      "--data", "@payload.json",
+                      webhook
+                  ],
+                  capture_output=True,
+                  text=True
               )
 
-              urllib.request.urlopen(req)
+              print(result.stdout)
+              print(result.stderr)
+
+              if result.returncode != 0 or "HTTP/2 204" not in result.stdout:
+                  raise SystemExit(1)
+
+              time.sleep(1)
           PY
-        env:
-          DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
