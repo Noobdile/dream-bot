@@ -13,7 +13,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Construire le message
+      - name: Construire les messages
         run: |
           python3 << 'PY'
           import json
@@ -38,16 +38,49 @@ jobs:
 
           lignes = data.get(jour, ["Aucune information."])
 
-          message = "🌙 **Les compagnons du jour — " + jour.upper() + "**\n\n"
-          message += "\n".join(lignes)
+          titre = f"🌙 LES COMPAGNONS DU JOUR — {jour.upper()}\n\n"
 
-          with open("payload.json", "w", encoding="utf-8") as f:
-              json.dump({"content": message}, f, ensure_ascii=False)
+          blocs = []
+          courant = titre
+
+          for ligne in lignes:
+              ajout = ligne + "\n"
+
+              if len(courant) + len(ajout) > 1900:
+                  blocs.append(courant)
+                  courant = ajout
+              else:
+                  courant += ajout
+
+          blocs.append(courant)
+
+          with open("messages.json", "w", encoding="utf-8") as f:
+              json.dump(blocs, f, ensure_ascii=False)
           PY
 
       - name: Poster sur Discord
         run: |
-          curl -i -X POST \
-            -H "Content-Type: application/json" \
-            --data @payload.json \
-            "${{ secrets.DISCORD_WEBHOOK }}"
+          python3 << 'PY'
+          import json
+          import os
+          import urllib.request
+
+          webhook = os.environ["DISCORD_WEBHOOK"]
+
+          with open("messages.json", "r", encoding="utf-8") as f:
+              messages = json.load(f)
+
+          for message in messages:
+              data = json.dumps({"content": message}).encode("utf-8")
+
+              req = urllib.request.Request(
+                  webhook,
+                  data=data,
+                  headers={"Content-Type": "application/json"},
+                  method="POST"
+              )
+
+              urllib.request.urlopen(req)
+          PY
+        env:
+          DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
