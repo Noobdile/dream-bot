@@ -3,7 +3,7 @@ name: Dream Bot - Les compagnons du jour
 on:
   workflow_dispatch:
   schedule:
-    - cron: "1 22 * * *"
+    - cron: "1 23 * * *"
 
 jobs:
   post-discord:
@@ -36,9 +36,11 @@ jobs:
               data = json.load(f)
 
           lignes = data.get(jour, [])
+
           rares = [ligne for ligne in lignes if "Toute la journée" not in ligne]
 
           contenu = f"🌙 **LES COMPAGNONS DU JOUR — {jour.upper()}**\n\n"
+
           contenu += "\n".join(lignes)
 
           if rares:
@@ -49,8 +51,10 @@ jobs:
 
           while len(contenu) > 1800:
               coupe = contenu.rfind("\n", 0, 1800)
+
               if coupe == -1:
                   coupe = 1800
+
               blocs.append(contenu[:coupe])
               contenu = contenu[coupe:].lstrip()
 
@@ -67,20 +71,25 @@ jobs:
         run: |
           python3 << 'PY'
           import json
+          import os
+          import urllib.request
+
+          webhook = os.environ["DISCORD_WEBHOOK"]
 
           with open("messages.json", "r", encoding="utf-8") as f:
               messages = json.load(f)
 
-          for i, message in enumerate(messages, start=1):
-              with open(f"payload-{i}.json", "w", encoding="utf-8") as f:
-                  json.dump({"content": message}, f, ensure_ascii=False)
-          PY
+          for message in messages:
+              data = json.dumps({
+                  "content": message
+              }).encode("utf-8")
 
-          for file in payload-*.json; do
-            curl -i -X POST \
-              -H "Content-Type: application/json" \
-              --data @"$file" \
-              "$DISCORD_WEBHOOK"
-            echo ""
-            sleep 1
-          done
+              req = urllib.request.Request(
+                  webhook,
+                  data=data,
+                  headers={"Content-Type": "application/json"},
+                  method="POST"
+              )
+
+              urllib.request.urlopen(req)
+          PY
