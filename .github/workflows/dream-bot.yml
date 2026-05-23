@@ -65,31 +65,29 @@ jobs:
               json.dump(blocs, f, ensure_ascii=False)
           PY
 
-      - name: Poster sur Discord
-        env:
-          DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
+      - name: Préparer les payloads Discord
         run: |
           python3 << 'PY'
           import json
-          import os
-          import urllib.request
-
-          webhook = os.environ["DISCORD_WEBHOOK"]
 
           with open("messages.json", "r", encoding="utf-8") as f:
               messages = json.load(f)
 
-          for message in messages:
-              data = json.dumps({
-                  "content": message
-              }).encode("utf-8")
-
-              req = urllib.request.Request(
-                  webhook,
-                  data=data,
-                  headers={"Content-Type": "application/json"},
-                  method="POST"
-              )
-
-              urllib.request.urlopen(req)
+          for i, message in enumerate(messages, start=1):
+              with open(f"payload-{i}.json", "w", encoding="utf-8") as f:
+                  json.dump({"content": message}, f, ensure_ascii=False)
           PY
+
+      - name: Poster sur Discord
+        env:
+          DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
+        run: |
+          for file in payload-*.json; do
+            curl -i -X POST \
+              -H "Content-Type: application/json" \
+              --data @"$file" \
+              "$DISCORD_WEBHOOK"
+
+            echo ""
+            sleep 1
+          done
