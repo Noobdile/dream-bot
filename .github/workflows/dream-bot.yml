@@ -37,57 +37,28 @@ jobs:
 
           lignes = data.get(jour, [])
 
+          normales = [ligne for ligne in lignes if "Toute la journée" in ligne]
           rares = [ligne for ligne in lignes if "Toute la journée" not in ligne]
 
           contenu = f"🌙 **LES COMPAGNONS DU JOUR — {jour.upper()}**\n\n"
-
-          contenu += "\n".join(lignes)
+          contenu += "\n".join(normales)
 
           if rares:
-              contenu += "\n\n⭐ **COMPAGNONS RARES DU JOUR** ⭐\n\n"
+              contenu += "\n\n⭐ **COMPAGNONS RARES DU JOUR** ⭐\n"
               contenu += "\n".join([f"**{rare}**" for rare in rares])
 
-          blocs = []
+          if len(contenu) > 2000:
+              raise SystemExit(f"Message trop long : {len(contenu)} caractères")
 
-          while len(contenu) > 1800:
-              coupe = contenu.rfind("\n", 0, 1800)
-
-              if coupe == -1:
-                  coupe = 1800
-
-              blocs.append(contenu[:coupe])
-              contenu = contenu[coupe:].lstrip()
-
-          if contenu.strip():
-              blocs.append(contenu)
-
-          with open("messages.json", "w", encoding="utf-8") as f:
-              json.dump(blocs, f, ensure_ascii=False)
-          PY
-
-      - name: Préparer les payloads Discord
-        run: |
-          python3 << 'PY'
-          import json
-
-          with open("messages.json", "r", encoding="utf-8") as f:
-              messages = json.load(f)
-
-          for i, message in enumerate(messages, start=1):
-              with open(f"payload-{i}.json", "w", encoding="utf-8") as f:
-                  json.dump({"content": message}, f, ensure_ascii=False)
+          with open("payload.json", "w", encoding="utf-8") as f:
+              json.dump({"content": contenu}, f, ensure_ascii=False)
           PY
 
       - name: Poster sur Discord
         env:
           DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
         run: |
-          for file in payload-*.json; do
-            curl -i -X POST \
-              -H "Content-Type: application/json" \
-              --data @"$file" \
-              "$DISCORD_WEBHOOK"
-
-            echo ""
-            sleep 1
-          done
+          curl -i -X POST \
+            -H "Content-Type: application/json" \
+            --data @payload.json \
+            "$DISCORD_WEBHOOK"
